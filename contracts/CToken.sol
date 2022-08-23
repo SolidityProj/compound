@@ -302,6 +302,7 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
      */
     function exchangeRateStoredInternal() virtual internal view returns (uint) {
         uint _totalSupply = totalSupply;
+        //首先检查当前总的供给量是否为0，如果是返回初始的兑换率，否则使用
         if (_totalSupply == 0) {
             /*
              * If there are no tokens minted:
@@ -313,6 +314,7 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
              * Otherwise:
              *  exchangeRate = (totalCash + totalBorrows - totalReserves) / totalSupply
              */
+            //(totalCash + totalBorrows - totalReserves) / totalSupply 计算新的的兑换率。
             uint totalCash = getCashPrior();
             uint cashPlusBorrowsMinusReserves = totalCash + totalBorrows - totalReserves;
             uint exchangeRate = cashPlusBorrowsMinusReserves * expScale / _totalSupply;
@@ -336,25 +338,39 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
      */
     function accrueInterest() virtual override public returns (uint) {
         /* Remember the initial block number */
+        //获取当前区块号
         uint currentBlockNumber = getBlockNumber();
+        //前一次调用时的区块号
         uint accrualBlockNumberPrior = accrualBlockNumber;
 
         /* Short-circuit accumulating 0 interest */
+        //如果当前区块号和前一次调用时的区块号一样，表示当前区块已经计算过利息，无需再计算，直接返回。
         if (accrualBlockNumberPrior == currentBlockNumber) {
             return NO_ERROR;
         }
 
         /* Read the previous values out of storage */
+        //获取资金池余额、总借款、总储备金、借款指数。
+
+
+        //获取资金池余额
         uint cashPrior = getCashPrior();
+        //总借款
         uint borrowsPrior = totalBorrows;
+        //总储备金
         uint reservesPrior = totalReserves;
+        //借款指数
         uint borrowIndexPrior = borrowIndex;
 
         /* Calculate the current borrow interest rate */
+        //调用利率模型合约的 getBorrowRate 方法，获取当前的借款利率。
         uint borrowRateMantissa = interestRateModel.getBorrowRate(cashPrior, borrowsPrior, reservesPrior);
+        //如果当前借款利率超过最大的借款利率，则抛出异常。
         require(borrowRateMantissa <= borrowRateMaxMantissa, "borrow rate is absurdly high");
 
         /* Calculate the number of blocks elapsed since the last accrual */
+        //最大的借款利率当前设置为 0.0005e16，即每区块 0.0005%
+        //计算从上次计算之后到当前经过的区块数量。该区块数量表示还未计算利息的区块区间。
         uint blockDelta = currentBlockNumber - accrualBlockNumberPrior;
 
         /*
@@ -366,10 +382,15 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
          *  borrowIndexNew = simpleInterestFactor * borrowIndex + borrowIndex
          */
 
+        //计算利息因子。利息因子 = 当前借款利率 * 累计未计算区块间隔。
         Exp memory simpleInterestFactor = mul_(Exp({mantissa: borrowRateMantissa}), blockDelta);
+        //计算应计利息。应计利息 = 利息因子 * 当前借款总额。
         uint interestAccumulated = mul_ScalarTruncate(simpleInterestFactor, borrowsPrior);
+        //计算借款总额。借款总额 = 应计利息 + 当前借款总额
         uint totalBorrowsNew = interestAccumulated + borrowsPrior;
+        //计算储备金总额。储备金总额 = 储备因子 * 应计利息 + 当前的储备金总额。
         uint totalReservesNew = mul_ScalarTruncateAddUInt(Exp({mantissa: reserveFactorMantissa}), interestAccumulated, reservesPrior);
+        //计算借款指数。借款指数 = 利息因子 * 当前借款指数 + 当前借款指数
         uint borrowIndexNew = mul_ScalarTruncateAddUInt(simpleInterestFactor, borrowIndexPrior, borrowIndexPrior);
 
         /////////////////////////
@@ -377,12 +398,14 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
+        //更新当前区块高度、借款指数、借款总额、储备金总额。
         accrualBlockNumber = currentBlockNumber;
         borrowIndex = borrowIndexNew;
         totalBorrows = totalBorrowsNew;
         totalReserves = totalReservesNew;
 
         /* We emit an AccrueInterest event */
+        //AccrueInterest
         emit AccrueInterest(cashPrior, interestAccumulated, borrowIndexNew, totalBorrowsNew);
 
         return NO_ERROR;
@@ -394,8 +417,10 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
      * @param mintAmount The amount of the underlying asset to supply
      */
     function mintInternal(uint mintAmount) internal nonReentrant {
+        //函数计算利息。如果出现在错误，则抛出异常。异常这里我们就不细说。
         accrueInterest();
         // mintFresh emits the actual Mint event if successful and logs on errors, so we don't need to
+        //
         mintFresh(msg.sender, mintAmount);
     }
 
@@ -407,16 +432,19 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
      */
     function mintFresh(address minter, uint mintAmount) internal {
         /* Fail if mint not allowed */
+        //调用审计合约的 mintAllowed 方法，检查是否允许当前地址存入指定数量的 ETH。如果不允许，则抛出异常。
         uint allowed = comptroller.mintAllowed(address(this), minter, mintAmount);
         if (allowed != 0) {
             revert MintComptrollerRejection(allowed);
         }
 
         /* Verify market's block number equals current block number */
+        //验证当前区块高度是否等于市场保存的区块高度。如果不一致则抛出异常。
         if (accrualBlockNumber != getBlockNumber()) {
             revert MintFreshnessCheck();
         }
 
+        //计算当前的兑换率。
         Exp memory exchangeRate = Exp({mantissa: exchangeRateStoredInternal()});
 
         /////////////////////////

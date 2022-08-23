@@ -42,8 +42,14 @@ contract CEther is CToken {
     /**
      * @notice Sender supplies assets into the market and receives cTokens in exchange
      * @dev Reverts upon any failure
+     存款函数会新增 cToken 数量，
+     即 totalSupply 增加了，
+     就等于挖矿了 cToken。
+     该操作会同时将用户的标的资产转入 cToken 合约中（数据会存储在代理合约中）
+     ，并根据最新的兑换率将对应的 cToken 代币转到用户钱包地址。
      */
     function mint() external payable {
+        //因为存款函数是直接调用父函数的 mintInternal 函数，那我们就进入这个函数一看究竟。
         mintInternal(msg.value);
     }
 
