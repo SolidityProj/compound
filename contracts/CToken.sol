@@ -30,30 +30,40 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
                         string memory symbol_,
                         uint8 decimals_) public {
         require(msg.sender == admin, "only admin may initialize the market");
+
+        //检查两个变量是否为0，如果不是则抛出异常。这一步主要是为了确保只初始化一次。
         require(accrualBlockNumber == 0 && borrowIndex == 0, "market may only be initialized once");
 
         // Set initial exchange rate
+        //设置初始的兑换率为参数指定的值，并进行检查以确保大于0。
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
         require(initialExchangeRateMantissa > 0, "initial exchange rate must be greater than zero.");
 
         // Set the comptroller
+        //设置审计合约地址。
         uint err = _setComptroller(comptroller_);
         require(err == NO_ERROR, "setting comptroller failed");
 
         // Initialize block number and borrow index (block number mocks depend on comptroller being set)
-        accrualBlockNumber = getBlockNumber();
-        borrowIndex = mantissaOne;
+
+        //初始化应计息区块号和 borrow index
+        accrualBlockNumber = getBlockNumber();//block.number
+        borrowIndex = mantissaOne;//mantissaOne 为一个 1e18 常量。
 
         // Set the interest rate model (depends on block number / borrow index)
+        //设置利率模型。
         err = _setInterestRateModelFresh(interestRateModel_);
         require(err == NO_ERROR, "setting interest rate model failed");
 
+
+        //最后，设置新 Token 的名称、符号、小数位等
         name = name_;
         symbol = symbol_;
         decimals = decimals_;
 
         // The counter starts true to prevent changing it from zero to non-zero (i.e. smaller cost/refund)
         _notEntered = true;
+        //在 Compound 货币市场中，为每个支持的代币都会生成一个新的 cToken，这个新的 cToken 是一个兼容的 ERC20 代币，所以也会有名称、符号、小数位等。
     }
 
     /**
@@ -904,13 +914,19 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
             revert SetComptrollerOwnerCheck();
         }
 
+        //函数首先检查调用者为管理员，然后保存当前审核合约地址到一个临时变量中，并检查新的地址为审计合约，然后保存新的审计合约到审计合约状态变量中，最后发射 NewComptroller 事件。
+
+        //然后保存当前审核合约地址到一个临时变量中
         ComptrollerInterface oldComptroller = comptroller;
         // Ensure invoke comptroller.isComptroller() returns true
+        //并检查新的地址为审计合约
         require(newComptroller.isComptroller(), "marker method returned false");
 
         // Set market's comptroller to newComptroller
+        //然后保存新的审计合约到审计合约状态变量中
         comptroller = newComptroller;
 
+        //最后发射 NewComptroller 事件。
         // Emit NewComptroller(oldComptroller, newComptroller)
         emit NewComptroller(oldComptroller, newComptroller);
 
@@ -1100,20 +1116,25 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
         }
 
         // We fail gracefully unless market's block number equals current block number
+        //应计息区块号和当前区块号相同（确保是在同一个区块内进行设置的）
         if (accrualBlockNumber != getBlockNumber()) {
             revert SetInterestRateModelFreshCheck();
         }
 
         // Track the market's current interest rate model
+        //保存当前利率模型合约地址到一个临时变量中
         oldInterestRateModel = interestRateModel;
 
         // Ensure invoke newInterestRateModel.isInterestRateModel() returns true
+        //并检查新的地址为利率模型合约
         require(newInterestRateModel.isInterestRateModel(), "marker method returned false");
 
         // Set the interest rate model to newInterestRateModel
+        //然后保存新的利率模型合约到利率模型合约状态变量中
         interestRateModel = newInterestRateModel;
 
         // Emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel)
+        //最后发射 NewMarketInterestRateModel 事件。
         emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel);
 
         return NO_ERROR;

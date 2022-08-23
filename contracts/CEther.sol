@@ -26,9 +26,10 @@ contract CEther is CToken {
                 string memory symbol_,
                 uint8 decimals_,
                 address payable admin_) {
-        // Creator of the contract is admin during initialization
+
         admin = payable(msg.sender);
 
+        //这段代码非常简单，首先设置管理员地址为当前合约调用者即部署者地址，然后调用父合约的 initialize 函数进行初始化，最后初始完成后，重新设置管理员地址为参数指定的地址。
         initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_);
 
         // Set the proper admin now that initialization is done
