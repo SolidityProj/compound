@@ -459,6 +459,8 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
          *  in case of a fee. On success, the cToken holds an additional `actualMintAmount`
          *  of cash.
          */
+        //计算发起者实际转入到合约中的 Token 数量
+        //对于当前情况，即底层资产为 ETH，实际输入的数量为 100%，即输入的数量为 mintAmount
         uint actualMintAmount = doTransferIn(minter, mintAmount);
 
         /*
@@ -466,6 +468,8 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
          *  mintTokens = actualMintAmount / exchangeRate
          */
 
+        //计算需要铸造的 cToken 数量。
+        //铸造的 cToken 数量等于真实输入到合约中的 Token 数量除以兑换率
         uint mintTokens = div_(actualMintAmount, exchangeRate);
 
         /*
@@ -474,10 +478,13 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
          *  accountTokensNew = accountTokens[minter] + mintTokens
          * And write them into storage
          */
+        //把铸造出来的 cToken 数量加入到总供给
         totalSupply = totalSupply + mintTokens;
+        //把铸造出来的 cToken 数量加入到用户对应的账户中
         accountTokens[minter] = accountTokens[minter] + mintTokens;
 
         /* We emit a Mint event, and a Transfer event */
+        //发射铸造事件和转账事件
         emit Mint(minter, actualMintAmount, mintTokens);
         emit Transfer(address(this), minter, mintTokens);
 
@@ -492,8 +499,11 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
      * @param redeemTokens The number of cTokens to redeem into underlying
      */
     function redeemInternal(uint redeemTokens) internal nonReentrant {
+        //调用 accrueInterest 函数计算利息。如果出现在错误，则抛出异常。异常这里我们就不细说。
         accrueInterest();
         // redeemFresh emits redeem-specific logs on errors, so we don't need to
+        //赎回存款
+        //检查赎回的 Token 数量或购回的底层资产数量是否为0。如果是，则抛出异常。
         redeemFresh(payable(msg.sender), redeemTokens, 0);
     }
 
@@ -543,6 +553,7 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
         }
 
         /* Fail if redeem not allowed */
+        //调用审计合约的 redeemAllowed 方法，检查是否允许赎回存款。如果不允许则抛出异常。
         uint allowed = comptroller.redeemAllowed(address(this), redeemer, redeemTokens);
         if (allowed != 0) {
             revert RedeemComptrollerRejection(allowed);

@@ -59,6 +59,9 @@ contract CEther is CToken {
      * @param redeemTokens The number of cTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
+    /*
+    赎回存款
+    */
     function redeem(uint redeemTokens) external returns (uint) {
         redeemInternal(redeemTokens);
         return NO_ERROR;
@@ -149,6 +152,7 @@ contract CEther is CToken {
         // Sanity checks
         require(msg.sender == from, "sender mismatch");
         require(msg.value == amount, "value mismatch");
+        //对于当前情况，即底层资产为 ETH，实际输入的数量为 100%，即输入的数量为 mintAmount
         return amount;
     }
 
